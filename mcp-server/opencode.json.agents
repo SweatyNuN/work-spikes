@@ -1,0 +1,68 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "ollama-local": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Ollama (local)",
+      "options": {
+        "baseURL": "http://localhost:11434/v1"
+      },
+      "models": {
+        "ornith:9b": {
+          "name": "Ornith 9B Builder",
+          "options": { "num_ctx": 16384 }
+        },
+        "qwen3.5:9b": {
+          "name": "Qwen 3.5 Planner",
+          "options": { "num_ctx": 16384 }
+        },
+        "qwen2.5-coder:7b": {
+          "name": "Qwen 2.5 Reviwer",
+          "options": { "num_ctx": 8192 }
+        }
+      }
+    }
+  },
+  "agent": {
+    "plan": {
+      "description": "Understands the task and produces a step-by-step plan.",
+      "mode": "primary",
+      "model": "ollama-local/qwen3.5:9b",
+      "permission": {
+        "edit": "deny",
+        "bash": "deny"
+      },
+      "prompt": "{file:./prompts/plan.txt}"
+    },
+
+    "build": {
+      "description": "Implements the plan and writes or modifies code.",
+      "mode": "primary",
+      "model": "ollama-local/ornith:9b",
+      "prompt": "{file:./prompts/build.txt}",
+      "permission": {
+        "edit": "allow",
+        "bash": "allow"
+      }
+    },
+    "code-reviewer": {
+      "description": "Reviews code for correctness, security, performance, and maintainability.",
+      "mode": "subagent",
+      "model": "ollama-local/qwen2.5-coder:7b",
+      "prompt": "{file:./prompts/review.txt}",
+      "permission": {
+        "edit": "deny"
+      }
+    },
+    // "operator": {
+    //   "description": "Runs commands, tests, and environment operations.",
+    //   "mode": "subagent",
+    //   "model": "ollama-local/qwen2.5-coder:7b",
+    //   "prompt": "{file:./prompts/operator.txt}",
+    //   "permission": {
+    //     "bash": "allow",
+    //     "edit": "deny"
+    //   }
+    // }
+  }
+}
