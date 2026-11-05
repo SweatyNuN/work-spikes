@@ -1,9 +1,9 @@
-variable "GOOGLE_CREDENTIALS" {
-  type      = string
-  sensitive = true
+provider "google" {
+  project = var.project_id
+  region  = var.region
 }
 
-provider "google" {
-  project = "work-spikes"
-  region  = "europe-west2" # or whatever region you use
+provider "google-beta" {
+  project = var.project_id
+  region  = var.region
 }

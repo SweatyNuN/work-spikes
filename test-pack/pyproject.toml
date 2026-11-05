@@ -1,0 +1,48 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "test-pack"
+dynamic = ["version"]
+description = "Declarative readiness checks for a Vertex AI Workbench deployment"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+  "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+# The built-in checkers only need PyYAML. These extras are for plugins.
+gcp = [
+  "google-cloud-aiplatform>=1.60",
+  "google-cloud-storage>=2.10",
+]
+dev = [
+  "packaging>=23",
+  "pytest>=8",
+  "ruff>=0.6",
+]
+
+[project.scripts]
+test-pack = "testpack.cli:main"
+
+[tool.setuptools]
+packages = ["testpack", "testpack.checkers"]
+
+[tool.setuptools.dynamic]
+version = { attr = "testpack.__version__" }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["testpack"]

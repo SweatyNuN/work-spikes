@@ -1,0 +1,36 @@
+# Access for the human user who will actually use the workbench.
+#
+# These checks need `expected_user` in config.yml. If it is empty they are
+# skipped rather than failed, which keeps the pack usable in environments
+# where the human is managed elsewhere (or where the caller is a service
+# account).
+#
+# Set it in config.yml:
+#   expected_user: you@company.com
+# or on the command line:
+#   python run.py --set expected_user=you@company.com
+
+category: User access
+description: IAM bindings for the human workbench user.
+
+checks:
+  - id: iam.user-vertex
+    title: User has roles/aiplatform.user
+    type: gcp_iam_binding
+    params:
+      scope: project
+      role: roles/aiplatform.user
+      member: "user:${expected_user}"
+    tags: [gcp, iam, user]
+    hint: Apply pipelines.tf, or grant the role to expected_user.
+
+  - id: iam.user-compute-sa
+    title: User can act as the default Compute service account
+    type: gcp_iam_binding
+    params:
+      scope: service_account
+      service_account: "${compute_service_account}"
+      role: roles/iam.serviceAccountUser
+      member: "user:${expected_user}"
+    tags: [gcp, iam, user]
+    hint: Apply google_service_account_iam_member.allow_user_impersonation_compute_default.

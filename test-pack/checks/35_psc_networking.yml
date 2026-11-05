@@ -1,0 +1,60 @@
+# Private Service Connect wiring for Vertex AI Pipelines (PSC-I).
+#
+# These checks are skipped until PSC values are configured in config.yml (or
+# passed with --set). The values normally come from platform-terraform:
+#
+#   terraform output -raw psc_network_attachment
+#   terraform output -raw psc_subnet
+#   terraform output -raw psc_region
+#
+# Leaving them empty is valid for a deployment that does not use PSC. Use
+# --strict only when PSC is actually required, because strict mode treats
+# skipped critical checks as failures.
+
+category: PSC networking
+description: "Private Service Connect interfaces used by Vertex AI Pipelines."
+
+checks:
+  - id: psc.subnet
+    title: PSC subnet exists with the expected purpose
+    type: gcp_subnet
+    params:
+      subnet: "${psc_subnet:-}"
+      region: "${psc_region:-}"
+      network: "${psc_network:-}"
+      purpose: PRIVATE_SERVICE_CONNECT
+    tags: [gcp, psc]
+    hint: Apply platform-terraform with enable_psc = true, or check psc_subnet.
+
+  - id: psc.network-attachment
+    title: PSC network attachment exists for Vertex Pipelines
+    type: gcp_network_attachment
+    params:
+      network_attachment: "${psc_network_attachment:-}"
+      region: "${psc_region:-}"
+      subnet: "${psc_subnet:-}"
+      connection_preference: "${psc_connection_preference:-ACCEPT_AUTOMATIC}"
+      network: "${psc_network:-}"
+    tags: [gcp, psc]
+    hint: Copy the psc_network_attachment output from platform-terraform.
+
+  - id: psc.vertex-network-user
+    title: Vertex service agent can use the PSC subnet
+    type: gcp_iam_binding
+    params:
+      scope: subnet
+      subnet: "${psc_subnet:-}"
+      region: "${psc_region:-}"
+      role: roles/compute.networkUser
+      member: "serviceAccount:${service_agent}"
+    tags: [gcp, psc, iam]
+    hint: Apply google_compute_subnetwork_iam_member.vertex_psc_network_user.
+
+  - id: psc.sdk
+    title: Vertex AI SDK supports PSC pipeline jobs
+    type: vertex_psc_sdk
+    params:
+      network_attachment: "${psc_network_attachment:-}"
+    severity: warning
+    tags: [gcp, psc, vertex, sdk]
+    hint: pip install --upgrade google-cloud-aiplatform

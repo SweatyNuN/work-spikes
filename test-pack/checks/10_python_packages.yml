@@ -1,0 +1,111 @@
+# Python libraries the workbench image is expected to ship with.
+#
+# To add a package, copy a block and change name/import_name/version.
+# `import_name` is what you would type in `import ...`; it often differs from
+# the pip distribution name (scikit-learn -> sklearn).
+
+category: Python packages
+description: Libraries a data science workbench is expected to provide.
+
+checks:
+  - id: pkg.aiplatform
+    title: Vertex AI SDK (google-cloud-aiplatform)
+    type: package
+    params:
+      name: google-cloud-aiplatform
+      import_name: vertexai
+      version: ">=1.60"
+    tags: [python, vertex]
+    hint: pip install --upgrade google-cloud-aiplatform
+
+  - id: pkg.storage
+    title: Cloud Storage client
+    type: package
+    params:
+      name: google-cloud-storage
+      import_name: google.cloud.storage
+      version: ">=2.10"
+    tags: [python, gcp]
+
+  - id: pkg.bigquery
+    title: BigQuery client
+    type: package
+    params:
+      name: google-cloud-bigquery
+      import_name: google.cloud.bigquery
+      version: ">=3.11"
+    tags: [python, gcp]
+
+  - id: pkg.kms
+    title: Cloud KMS client
+    type: package
+    params:
+      name: google-cloud-kms
+      import_name: google.cloud.kms
+      version: ">=2.20"
+    tags: [python, gcp]
+
+  - id: pkg.pandas
+    title: pandas
+    type: package
+    params:
+      name: pandas
+      import_name: pandas
+      version: ">=2.0"
+    tags: [python, data]
+
+  - id: pkg.numpy
+    title: numpy
+    type: package
+    params:
+      name: numpy
+      import_name: numpy
+      version: ">=1.24"
+    tags: [python, data]
+
+  - id: pkg.scikit-learn
+    title: scikit-learn
+    type: package
+    params:
+      name: scikit-learn
+      import_name: sklearn
+      version: ">=1.3"
+    tags: [python, data]
+
+  - id: pkg.jupyterlab
+    title: JupyterLab
+    type: package
+    params:
+      name: jupyterlab
+      import_name: jupyterlab
+      version: ">=3.6"
+    tags: [python, workbench]
+
+  - id: pkg.ipykernel
+    title: ipykernel
+    type: package
+    params:
+      name: ipykernel
+      import_name: ipykernel
+      version: ">=6.25"
+    tags: [python, workbench]
+
+  - id: pkg.kfp
+    title: Kubeflow Pipelines SDK (kfp)
+    type: package
+    params:
+      name: kfp
+      import_name: kfp
+      version: ">=2.0"
+    severity: warning
+    tags: [python, pipelines, vertex]
+    hint: pip install "kfp>=2.0" to author Vertex Pipelines from this environment.
+
+  - id: pkg.pip-check
+    title: No broken pip dependencies
+    type: command
+    params:
+      command: ["python", "-m", "pip", "check"]
+    severity: warning
+    tags: [python]
+    hint: Run `pip check` for the conflict list; base images sometimes ship minor conflicts.

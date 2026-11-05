@@ -1,0 +1,64 @@
+# Resources created by ../platform-terraform.
+#
+# These checks describe the *contract* of the provisioning templates:
+# the Vertex service agent exists, the CMEK key is usable by it, and the
+# pipeline bucket is private but writable by Vertex. If these go red, the
+# Terraform templates are not safe to hand to users.
+
+category: GCP infrastructure
+description: "The Terraform contract: service agent, CMEK, pipeline bucket and IAM."
+
+checks:
+  - id: gcp.vertex-service-agent
+    title: Vertex AI service agent exists
+    type: gcp_service_account
+    params:
+      email: "${service_agent}"
+    tags: [gcp, iam, vertex]
+    hint: Apply the google_project_service_identity resource in agent.tf.
+
+  - id: gcp.kms-key
+    title: Vertex CMEK key exists with 30-day rotation
+    type: gcp_kms_key
+    params:
+      keyring: "${kms_keyring}"
+      key: "${kms_key}"
+      location: "${kms_location}"
+      rotation_days: 30
+      purpose: ENCRYPT_DECRYPT
+    tags: [gcp, kms]
+    hint: Check kms.tf and the deployment's region.
+
+  - id: gcp.kms-iam
+    title: Vertex service agent can use the CMEK key
+    type: gcp_iam_binding
+    params:
+      scope: kms_key
+      keyring: "${kms_keyring}"
+      key: "${kms_key}"
+      location: "${kms_location}"
+      role: roles/cloudkms.cryptoKeyEncrypterDecrypter
+      member: "serviceAccount:${service_agent}"
+    tags: [gcp, kms, iam]
+    hint: Apply google_kms_crypto_key_iam_binding.vertex_sa_cmek.
+
+  - id: gcp.pipeline-bucket
+    title: Pipeline bucket exists with uniform access
+    type: gcp_bucket
+    params:
+      bucket: "${bucket}"
+      location: "${region}"
+      uniform_access: true
+    tags: [gcp, storage]
+    hint: Check the bucket name and region in storage.tf.
+
+  - id: gcp.pipeline-bucket-iam
+    title: Vertex service agent can write to the pipeline bucket
+    type: gcp_iam_binding
+    params:
+      scope: bucket
+      bucket: "${bucket}"
+      role: roles/storage.editor
+      member: "serviceAccount:${service_agent}"
+    tags: [gcp, storage, iam]
+    hint: Apply google_storage_bucket_iam_binding.vertex_bucket_sa.

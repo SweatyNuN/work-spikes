@@ -1,0 +1,65 @@
+# test-pack configuration
+#
+# Copy this file to config.yml and edit it:
+#   cp config.example.yml config.yml
+# or run:
+#   python run.py --init
+#
+# Anything under `values` can be used in checks as ${name}.
+#
+# `auto` means "discover this from the environment": environment variables
+# first, then the GCE metadata server, then gcloud config. That is what makes
+# the same pack reusable across UAT projects without editing YAML.
+
+testpack:
+  # Where the YAML checks and Python plugins live.
+  checks_dir: checks
+  plugins_dir: plugins
+  # Applied to checks that do not set their own timeout (seconds).
+  default_timeout: 60
+
+values:
+  # Discovery order: GOOGLE_CLOUD_PROJECT, GCE metadata, gcloud config.
+  project_id: auto
+  project_number: auto
+  region: auto
+  zone: auto
+
+  # Derived from the values above. These match ../platform-terraform;
+  # rename them if your Terraform uses different resource names.
+  bucket: "bucket-name"
+  kms_keyring: vertex-keyring
+  kms_key: vertex-cmek
+  kms_location: "${region}"
+  service_agent: "service-${project_number}@gcp-sa-aiplatform.iam.gserviceaccount.com"
+  compute_service_account: "${project_number}-compute@developer.gserviceaccount.com"
+
+  # The human who should have access to the workbench.
+  #   auto  -> use the active gcloud account
+  #   ""    -> skip the user IAM checks (the default)
+  expected_user: ""
+
+  # ---------------------------------------------------------------------
+  # Private Service Connect (PSC) for Vertex AI Pipelines (optional)
+  # ---------------------------------------------------------------------
+  # Leave these empty to skip the PSC checks. When platform-terraform is
+  # applied with enable_psc = true, copy its outputs here (or pass them with
+  # --set). The network attachment value may be the full resource name or
+  # just the attachment name; the region is derived when it is in the name.
+  psc_network_attachment: ""
+  psc_subnet: ""
+  psc_network: ""
+  psc_region: "${region}"
+  psc_connection_preference: ACCEPT_AUTOMATIC
+
+  # Optional, disabled by default: a real pipeline run over PSC.
+  # Compile examples/psc_pipeline.py with kfp, upload the JSON to GCS, then
+  # set this and enable integration.pipeline-psc in checks/60_integrations.yml.
+  pipeline_template: ""
+  pipeline_root: "gs://${bucket}/pipeline-root"
+  pipeline_service_account: ""
+
+  # Add any values your own checks need, for example:
+  # expected_jupyterlab_extension: jupyterlab-git
+  # team_email: data-science@example.com
+  # expected_machine_type: n1-standard-8

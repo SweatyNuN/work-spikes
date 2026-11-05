@@ -1,0 +1,27 @@
+# APIs enabled by ../platform-terraform/api.tf.
+#
+# A single check reports every missing API at once when it fails, which is
+# usually more useful than ten separate red lines for one disabled service.
+
+category: GCP APIs
+description: Google Cloud services the workbench platform depends on.
+
+checks:
+  - id: gcp.apis
+    title: Required Google Cloud APIs are enabled
+    type: gcp_api_enabled
+    params:
+      apis:
+        - cloudresourcemanager.googleapis.com
+        - iam.googleapis.com
+        - compute.googleapis.com
+        - storage.googleapis.com
+        - cloudkms.googleapis.com
+        - aiplatform.googleapis.com
+        - notebooks.googleapis.com
+        - artifactregistry.googleapis.com
+        - containerregistry.googleapis.com
+        - bigquery.googleapis.com
+    timeout: 90
+    tags: [gcp, infrastructure]
+    hint: Apply the Terraform, or enable the missing APIs with the gcloud command in the failure detail.

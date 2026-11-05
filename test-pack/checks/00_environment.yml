@@ -1,0 +1,57 @@
+# Environment basics.
+#
+# Every check has:
+#   title    - what a human reads in the report (required)
+#   type     - a check type from README.md (required)
+#   params   - type-specific settings (optional)
+#   severity - critical (default) or warning (optional)
+#   tags     - labels for --only / --skip (optional)
+#   enabled  - false keeps the check in the pack but does not run it
+#
+# Anything in ${...} is resolved from config.yml.
+
+category: Environment
+description: The basics every workbench needs before data science work can start.
+
+checks:
+  - id: env.python
+    title: Python is 3.10 or newer
+    type: python_version
+    params:
+      version: ">=3.10"
+    tags: [runtime]
+    hint: Use a supported Vertex AI Workbench image.
+
+  - id: env.pip
+    title: pip is available
+    type: command
+    params:
+      command: ["python", "-m", "pip", "--version"]
+    tags: [runtime]
+
+  - id: env.jupyter
+    title: Jupyter is available
+    type: command
+    params:
+      command: ["jupyter", "--version"]
+    tags: [tooling]
+    hint: This pack is meant to be run inside a Vertex AI Workbench instance.
+
+  - id: env.gcloud
+    title: gcloud CLI is available
+    type: command
+    params:
+      command: ["gcloud", "--version"]
+    tags: [gcp, tooling]
+    hint: Vertex AI Workbench images include the Google Cloud SDK.
+
+  - id: env.home-writable
+    title: Home directory is writable with free space
+    type: disk
+    params:
+      path: "~"
+      writable: true
+      min_free_gb: 5
+    severity: warning
+    tags: [runtime]
+    hint: Check that the workbench persistent disk is mounted and not full.

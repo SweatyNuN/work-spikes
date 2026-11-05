@@ -1,0 +1,56 @@
+# End-to-end smoke tests: they prove the workbench can actually *use* the
+# platform, not just that the resources exist.
+
+category: Integrations
+description: "End-to-end calls against Vertex AI, BigQuery and Cloud Storage."
+
+checks:
+  - id: integration.vertex-sdk
+    title: Vertex AI SDK can initialise and list endpoints
+    type: vertex_sdk_smoke
+    params:
+      region: "${region}"
+    timeout: 120
+    tags: [gcp, vertex, integration]
+    hint: Check roles/aiplatform.user and that aiplatform.googleapis.com is enabled.
+
+  - id: integration.bigquery
+    title: BigQuery can run a trivial query
+    type: gcp_bigquery_query
+    params:
+      sql: "SELECT 1 AS ok"
+      column: ok
+      expect_value: "1"
+    timeout: 120
+    tags: [gcp, bigquery, integration]
+    hint: Requires bigquery.jobs.create (roles/bigquery.user or roles/bigquery.jobUser).
+
+  # Example of a mutating integration test with cleanup. Enable it when you
+  # want to prove write access to the pipeline bucket end to end.
+  - id: integration.bucket-roundtrip
+    title: Pipeline bucket can store, read and delete an object
+    type: storage_roundtrip
+    params:
+      bucket: "${bucket}"
+    enabled: false
+    severity: warning
+    tags: [gcp, storage, integration]
+
+  # Real PSC-I pipeline run. This creates a Vertex AI Pipeline run, so it is
+  # disabled by default. Compile examples/psc_pipeline.py, upload the template
+  # to GCS, set pipeline_template in config.yml, then enable this check.
+  - id: integration.pipeline-psc
+    title: Vertex pipeline runs with PSC networking
+    type: vertex_pipeline_psc
+    params:
+      template_path: "${pipeline_template:-}"
+      pipeline_root: "${pipeline_root:-}"
+      network_attachment: "${psc_network_attachment:-}"
+      region: "${psc_region:-}"
+      service_account: "${pipeline_service_account:-}"
+      dns_peering: []
+      wait: true
+    enabled: false
+    timeout: 1800
+    tags: [gcp, psc, vertex, integration, slow]
+    hint: Compile examples/psc_pipeline.py, set pipeline_template, then enable this check.

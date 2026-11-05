@@ -1,0 +1,15 @@
+# Local, environment-specific config. Never commit this: project IDs and
+# resource names change per UAT environment.
+config.yml
+
+# Generated reports.
+reports/
+*.junit.xml
+
+# Local Python noise (the repo-level .gitignore also covers most of this).
+__pycache__/
+.venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.coverage

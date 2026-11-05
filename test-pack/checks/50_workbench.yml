@@ -1,0 +1,25 @@
+# Kernel and extension expectations for the notebook runtime.
+
+category: Workbench runtime
+description: The notebook front end and kernels users interact with.
+
+checks:
+  - id: workbench.python3-kernel
+    title: python3 Jupyter kernel is installed
+    type: jupyter_kernel
+    params:
+      name: python3
+    tags: [workbench, jupyter]
+    hint: Rebuild the workbench image, or register the kernel with ipykernel.
+
+  # Copy this block for each JupyterLab extension you require, then set
+  # enabled: true and change params.name.
+  - id: workbench.labextension-example
+    title: Example JupyterLab extension is enabled
+    type: jupyter_extension
+    params:
+      name: jupyterlab-git
+      must_be_enabled: true
+    enabled: false
+    severity: warning
+    tags: [workbench, jupyter]
