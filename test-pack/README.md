@@ -112,7 +112,7 @@ CLI flags.
 values:
   project_id: auto
   region: auto
-  bucket: "${project_id}-fucket"
+  bucket: "bucket-name"
   expected_user: ""
 ```
 
