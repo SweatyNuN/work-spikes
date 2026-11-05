@@ -161,6 +161,7 @@ DNS peering and troubleshooting, are in
 | [PSC networking](docs/psc-networking.md) | Terraform + validation + real pipeline run |
 | [CI](docs/ci.md) | Release gates, JSON/JUnit, Cloud Build/GitHub Actions |
 | [Troubleshooting](docs/troubleshooting.md) | Common failures and fixes |
+| [AGENTS.md](AGENTS.md) | Working guide for coding agents changing the pack |
 
 ## Why not pytest?
 
