@@ -53,6 +53,7 @@ warning or critical skip), `2` the pack could not run.
 | PSC networking | PSC subnet, network attachment, Vertex agent network IAM, SDK support |
 | User access | `roles/aiplatform.user`, act-as on the compute service account |
 | Workbench runtime | `python3` kernel, JupyterLab extensions |
+| Negative controls | Public web egress blocked, no project-admin permissions, no public project/bucket bindings, no KMS admin role |
 | Integrations | Vertex SDK smoke test, BigQuery query, optional GCS round-trip, optional real pipeline run over PSC |
 
 The default pack mirrors the Terraform in this repo. Rename or add checks

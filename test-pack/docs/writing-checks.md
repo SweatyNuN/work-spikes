@@ -243,6 +243,81 @@ See [PSC networking](psc-networking.md) for the full setup.
     min_free_gb: 5
 ```
 
+## Negative checks
+
+Negative checks assert what the workbench must **not** be able to do. They live
+in `checks/45_security.yml` by default. If an environment intentionally allows
+something (for example public egress), disable the specific check with
+`enabled: false` and record why.
+
+### Public egress must be blocked
+
+`http_blocked` passes only when every URL is unreachable. Network errors,
+DNS failures, TLS failures and timeouts count as blocked. HTTP 403, 407 and 451
+are treated as blocked by default (a proxy or policy denial); any other HTTP
+response counts as reachable and fails the check.
+
+```yaml
+- title: Public web egress is blocked
+  type: http_blocked
+  params:
+    urls:
+      - https://www.google.com
+      - https://pypi.org
+      - https://example.com
+    probe_timeout: 5
+```
+
+Pair it with a metadata-server control so a total network outage does not make
+the blocked result meaningless:
+
+```yaml
+- title: Metadata server is reachable (control)
+  type: http
+  params:
+    url: "http://metadata.google.internal/computeMetadata/v1/project/project-id"
+    headers:
+      Metadata-Flavor: Google
+    status: 200
+  severity: warning
+```
+
+### An IAM binding must not exist
+
+Use `gcp_iam_binding` with `present: false`. If you omit `role`, the check
+fails when the member appears in **any** binding — useful for public buckets:
+
+```yaml
+- title: Pipeline bucket is not public
+  type: gcp_iam_binding
+  params:
+    scope: bucket
+    bucket: "${bucket}"
+    member: allUsers
+    present: false
+```
+
+### Effective permissions must be absent
+
+`gcp_iam_permissions` asks Resource Manager `testIamPermissions` what the
+**calling** identity can actually do, including inherited folder/org roles:
+
+```yaml
+- title: Workbench identity cannot administer the project
+  type: gcp_iam_permissions
+  params:
+    permissions:
+      - resourcemanager.projects.setIamPolicy
+      - resourcemanager.projects.delete
+    expect: absent
+```
+
+It cannot answer "can another user do X?" — use `gcp_iam_binding` for direct
+bindings on another principal. It also only evaluates permissions that apply
+to the project resource; resource-scoped permissions belong in a
+resource-specific check. Effective-permission checks run as the workbench
+service account (or whoever runs the pack), not the human user.
+
 ## Test a new check
 
 ```bash

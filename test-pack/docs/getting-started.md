@@ -42,7 +42,7 @@ python run.py --init      # creates config.yml from config.example.yml
 ## Reading the output
 
 ```text
-test-pack v1.1.0  Vertex AI Workbench readiness
+test-pack v1.2.0  Vertex AI Workbench readiness
 
   project         work-spikes-492917
   project number  754536297652

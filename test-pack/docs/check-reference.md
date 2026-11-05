@@ -28,6 +28,7 @@ import name differs (for example `scikit-learn` → `sklearn`).
 | `file` | `path`, `exists`, `kind`, `contains`, `not_contains`, `regex`, `min_bytes`, `max_bytes` | File/directory presence and content |
 | `env` | `name`, `present`, `equals`, `contains`, `one_of`, `regex`, `secret` | Environment variable |
 | `http` | `url`, `method`, `status`, `contains`, `body_regex`, `headers`, `body` | HTTP response |
+| `http_blocked` | `url` or `urls`, `probe_timeout`, `blocked_statuses`, `headers` | URLs are **not** reachable |
 | `gpu` | `min_count`, `name_contains`, `optional` | NVIDIA GPU visibility |
 | `disk` | `path`, `writable`, `min_free_gb` | Path writable and free space |
 
@@ -60,6 +61,7 @@ config value.
 | `gcp_vertex_endpoints` | `region`, `min_count`, `exact_count`, `name_contains`, `project` | Vertex endpoints exist |
 | `gcp_subnet` | `subnet`, `region`, `network`, `purpose`, `private_ip_google_access`, `ip_cidr_range` | Compute subnet metadata |
 | `gcp_network_attachment` | `network_attachment`/`name`, `region`, `subnet`, `connection_preference`, `producer_accept_lists`, `network` | PSC network attachment |
+| `gcp_iam_permissions` | `permissions`, `expect` (`absent`/`present`), `project`, `http_timeout` | Effective permissions for the **calling** identity |
 
 ### IAM scopes
 
@@ -75,7 +77,39 @@ config value.
 `serviceAccount:service-123@gcp-sa-aiplatform.iam.gserviceaccount.com` or
 `user:someone@example.com`. Comparison is case-insensitive.
 
-Set `present: false` to assert that a role is **not** granted.
+Set `present: false` to assert that a role is **not** granted. When
+`present: false`, `role` may be omitted: the check then fails if the member
+appears in **any** binding. This is how the public-bucket checks work:
+
+```yaml
+- title: Bucket is not public
+  type: gcp_iam_binding
+  params:
+    scope: bucket
+    bucket: "${bucket}"
+    member: allUsers
+    present: false
+```
+
+`gcp_iam_permissions` is different: it asks the Resource Manager
+`testIamPermissions` API what the identity running the pack is effectively
+allowed to do, including permissions inherited from folders and the
+organisation. Use it for negative assertions:
+
+```yaml
+- title: Workbench identity cannot administer the project
+  type: gcp_iam_permissions
+  params:
+    permissions:
+      - resourcemanager.projects.setIamPolicy
+      - resourcemanager.projects.delete
+    expect: absent
+```
+
+The API only tests the caller's own permissions and only permissions that
+apply to the **project** resource. It cannot answer "can this other user do
+X?", and resource-scoped permissions (for example `storage.buckets.delete`)
+belong in a resource-specific check such as `gcp_iam_binding` role absence.
 
 ### Resource name formats
 

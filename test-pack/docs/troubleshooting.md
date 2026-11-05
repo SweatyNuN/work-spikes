@@ -116,6 +116,33 @@ run inside the instance; use `--skip workbench` on a laptop.
 JupyterLab's text output is not a stable API. Replace the check with a
 `command` type and a `stdout_regex`, or update the built-in checker.
 
+## Negative controls
+
+### `Public web egress is blocked` fails
+
+That is the finding: the environment can reach public endpoints. If egress is
+intentionally allowed for this environment, set `enabled: false` on
+`security.public-web-blocked` and document why. Do not weaken the check
+globally.
+
+### `Workbench identity cannot administer the project` fails
+
+The detail lists the forbidden permissions the caller actually has. This is an
+effective-permission check (it includes inherited folder/org roles), so compare
+it with the workbench service account's intended role. `testIamPermissions`
+only tests the caller, not another user.
+
+### A public project/bucket check fails
+
+The detail names the role and member found. Remove the `allUsers` or
+`allAuthenticatedUsers` binding, or enforce public access prevention on the
+bucket.
+
+### `Metadata server is reachable` fails
+
+The blocked-web check is not trustworthy in this state; fix workbench
+networking/metadata access first.
+
 ## PSC-specific
 
 | Symptom | Fix |

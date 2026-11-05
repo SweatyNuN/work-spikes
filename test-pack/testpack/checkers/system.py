@@ -9,6 +9,7 @@ import tempfile
 import urllib.error
 import urllib.request
 
+from .. import __version__
 from ..models import Outcome
 from ..registry import check
 
@@ -236,7 +237,7 @@ def http_check(ctx, params):
     )
     timeout = float(params.get("timeout") or min(ctx.default_timeout, 15))
 
-    headers = {"User-Agent": "test-pack/1.0"}
+    headers = {"User-Agent": f"test-pack/{__version__}"}
     headers.update({str(key): str(value) for key, value in (params.get("headers") or {}).items()})
 
     body = params.get("body")
@@ -282,6 +283,85 @@ def http_check(ctx, params):
         return Outcome.fail("; ".join(problems), detail=text[:2000])
 
     return Outcome.ok(f"{method} {url} -> {status}")
+
+
+def _probe_blocked_url(
+    url: str,
+    timeout: float,
+    headers: dict[str, str],
+    blocked_statuses: set[int],
+) -> tuple[bool, str]:
+    """Return (is_blocked, detail) for one URL.
+
+    Network-level failures and configured proxy/block statuses count as
+    blocked. Any other HTTP response counts as reachable.
+    """
+
+    request = urllib.request.Request(url, headers=headers, method="GET")
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return False, f"HTTP {response.status}"
+    except urllib.error.HTTPError as exc:
+        if exc.code in blocked_statuses:
+            return True, f"HTTP {exc.code}"
+        return False, f"HTTP {exc.code}"
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", exc)
+        return True, f"{type(exc).__name__}: {reason}"
+
+
+@check("http_blocked", "Assert URLs are NOT reachable from this environment")
+def http_blocked(ctx, params):
+    urls = params.get("urls")
+    if urls is None and params.get("url"):
+        urls = [params["url"]]
+    if isinstance(urls, str):
+        urls = [urls]
+    if not urls:
+        return Outcome.fail("check needs 'url' or 'urls'")
+
+    urls = [str(url) for url in urls]
+    invalid = [url for url in urls if not url.startswith(("http://", "https://"))]
+    if invalid:
+        return Outcome.fail(
+            "only http(s) URLs are supported",
+            detail="Invalid: " + ", ".join(invalid),
+        )
+
+    raw_statuses = params.get("blocked_statuses")
+    if raw_statuses is None:
+        blocked_statuses = {403, 407, 451}
+    elif isinstance(raw_statuses, (list, tuple, set)):
+        blocked_statuses = {int(item) for item in raw_statuses}
+    else:
+        blocked_statuses = {int(raw_statuses)}
+
+    probe_timeout = float(params.get("probe_timeout") or 5)
+    headers = {"User-Agent": f"test-pack/{__version__}", "Cache-Control": "no-cache"}
+    headers.update({str(key): str(value) for key, value in (params.get("headers") or {}).items()})
+
+    results: list[tuple[str, bool, str]] = []
+    for url in urls:
+        blocked, detail = _probe_blocked_url(url, probe_timeout, headers, blocked_statuses)
+        results.append((url, blocked, detail))
+
+    reachable = [item for item in results if not item[1]]
+    detail_text = "\n".join(
+        f"{'BLOCKED' if blocked else 'REACHABLE':<9} {url} ({detail})"
+        for url, blocked, detail in results
+    )
+
+    if reachable:
+        return Outcome.fail(
+            f"{len(reachable)} of {len(urls)} public URL(s) are reachable",
+            detail=detail_text,
+            hint=(
+                "Public egress is open. If that is intentional for this "
+                "environment, set enabled: false on this check."
+            ),
+        )
+
+    return Outcome.ok(f"{len(urls)} public URL(s) blocked", detail=detail_text)
 
 
 @check("gpu", "Assert an NVIDIA GPU is visible")

@@ -55,7 +55,7 @@ Stable shape for dashboards and drift diffs:
 ```json
 {
   "tool": "test-pack",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "generated_at": "2026-11-05T21:00:00+00:00",
   "config": { "project_id": "...", "region": "..." },
   "summary": {

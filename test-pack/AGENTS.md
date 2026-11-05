@@ -228,6 +228,33 @@ Important constraints:
 - PSC-I availability can depend on project allowlisting/region. Report that as
   a caveat, do not encode a workaround.
 
+## Negative testing
+
+Negative assertions live in `checks/45_security.yml`. They are part of the
+requirements, not optional extras. Preserve their intent when refactoring:
+
+- `http_blocked` passes on network/DNS/TLS failure, timeout, or a configured
+  blocked status (default 403/407/451). Any other HTTP response is reachable
+  and fails. It uses `probe_timeout`, not the injected check timeout, so a
+  blocked-egress check does not hang for a minute per URL.
+- `security.metadata-control` is a control: if the metadata server is
+  unreachable, the blocked-web result is meaningless. Keep the control.
+- `gcp_iam_permissions` calls Resource Manager `testIamPermissions` as the
+  caller. It sees effective project permissions, including inherited roles. It
+  cannot test another principal.
+- `gcp_iam_binding` with `present: false` and no `role` fails if the member
+  appears in **any** binding. This is used for the `allUsers` /
+  `allAuthenticatedUsers` project and bucket checks.
+- Do not enable `security.no-data-destruction` or similar destructive
+  permission checks by default. Leave them as documented examples unless the
+  user asks.
+- Do not disable a negative check to make a run green. If an environment
+  intentionally allows egress or broad IAM, the check should be disabled with
+  a documented reason in that deployment's config/notes.
+- Test negative logic with mocks: network failures, blocked HTTP statuses,
+  reachable responses, granted/absent permission payloads and role-less IAM
+  policies. Never depend on a live cloud project.
+
 ## Terraform guardrails
 
 - Provider project/region now come from `var.project_id` / `var.region`.
@@ -282,6 +309,7 @@ Before handing work back:
 - [ ] `ruff check .` and `ruff format --check .` pass.
 - [ ] `test-pack --list` (or `python run.py --list`) loads all checks.
 - [ ] New checks/types have tests and docs.
+- [ ] Negative controls were considered (egress, broad IAM, public bindings).
 - [ ] New config keys exist in `DEFAULT_VALUES`, `config.example.yml` and
       `docs/configuration.md`.
 - [ ] Version bumped for user-visible changes.

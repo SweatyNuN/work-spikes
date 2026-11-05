@@ -1,0 +1,135 @@
+# Negative controls: things the workbench must NOT be able to reach or do.
+#
+# These checks are deliberately opinionated. If an environment intentionally
+# allows public egress or broad IAM, set enabled: false on the specific check
+# and record why in the deployment notes.
+
+category: Negative controls
+description: "Assertions about what the workbench must not reach or be allowed to do."
+
+checks:
+  - id: security.metadata-control
+    title: Metadata server is reachable (control for blocked-web checks)
+    type: http
+    params:
+      url: "http://metadata.google.internal/computeMetadata/v1/project/project-id"
+      headers:
+        Metadata-Flavor: Google
+      status: 200
+    timeout: 15
+    severity: warning
+    tags: [security, network]
+    hint: If this is red, fix the workbench network before trusting the blocked-web result.
+
+  - id: security.public-web-blocked
+    title: Public web egress is blocked
+    type: http_blocked
+    params:
+      urls:
+        - https://www.google.com
+        - https://pypi.org
+        - https://example.com
+      probe_timeout: 5
+    tags: [security, network]
+    hint: If public egress is intentional for this environment, set enabled false on this check.
+
+  - id: security.no-privilege-escalation
+    title: Workbench identity cannot administer the project
+    type: gcp_iam_permissions
+    params:
+      permissions:
+        - resourcemanager.projects.setIamPolicy
+        - resourcemanager.projects.delete
+        - resourcemanager.projects.undelete
+        - resourcemanager.projects.move
+        - resourcemanager.projects.update
+      expect: absent
+    timeout: 45
+    tags: [security, iam]
+    hint: Remove roles/owner or other broad roles from the workbench service account.
+
+  - id: security.project-no-public
+    title: Project IAM does not grant access to public principals
+    type: gcp_iam_binding
+    params:
+      scope: project
+      members: [allUsers, allAuthenticatedUsers]
+      present: false
+    tags: [security, iam]
+    hint: Remove allUsers / allAuthenticatedUsers bindings from the project IAM policy.
+
+  - id: security.bucket-no-public
+    title: Pipeline bucket is not public to allUsers
+    type: gcp_iam_binding
+    params:
+      scope: bucket
+      bucket: "${bucket}"
+      member: allUsers
+      present: false
+    tags: [security, storage, iam]
+    hint: Remove the allUsers binding from the bucket IAM policy.
+
+  - id: security.bucket-no-authenticated
+    title: Pipeline bucket is not public to allAuthenticatedUsers
+    type: gcp_iam_binding
+    params:
+      scope: bucket
+      bucket: "${bucket}"
+      member: allAuthenticatedUsers
+      present: false
+    tags: [security, storage, iam]
+
+  - id: security.compute-sa-no-owner
+    title: Workbench service account is not a project owner
+    type: gcp_iam_binding
+    params:
+      scope: project
+      role: roles/owner
+      member: "serviceAccount:${compute_service_account}"
+      present: false
+    tags: [security, iam]
+    hint: Remove roles/owner from the default compute service account.
+
+  - id: security.kms-agent-no-admin
+    title: Vertex service agent is not a KMS administrator
+    type: gcp_iam_binding
+    params:
+      scope: kms_key
+      keyring: "${kms_keyring}"
+      key: "${kms_key}"
+      location: "${kms_location}"
+      role: roles/cloudkms.admin
+      member: "serviceAccount:${service_agent}"
+      present: false
+    tags: [security, kms, iam]
+
+  # Stricter example: the default compute SA historically got roles/editor.
+  # Enable this once the workbench runs as a least-privilege service account.
+  - id: security.compute-sa-no-editor
+    title: Workbench service account does not have roles/editor
+    type: gcp_iam_binding
+    params:
+      scope: project
+      role: roles/editor
+      member: "serviceAccount:${compute_service_account}"
+      present: false
+    enabled: false
+    severity: warning
+    tags: [security, iam]
+
+  # Example of a stricter project-level policy. Enable it only if the
+  # workbench identity should not be able to change project metadata at all.
+  # Resource-scoped permissions (for example storage.buckets.delete) are not
+  # evaluated by projects.testIamPermissions; use gcp_iam_binding for roles.
+  - id: security.no-project-mutation
+    title: Workbench identity cannot update project metadata
+    type: gcp_iam_permissions
+    params:
+      permissions:
+        - resourcemanager.projects.update
+        - resourcemanager.projects.undelete
+        - resourcemanager.projects.move
+      expect: absent
+    enabled: false
+    severity: warning
+    tags: [security, iam]

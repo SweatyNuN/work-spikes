@@ -310,3 +310,110 @@ def test_psc_subnet_iam_binding(monkeypatch):
         },
     )
     assert outcome.status == "pass"
+
+
+class FakeJsonResponse:
+    def __init__(self, payload):
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
+    def read(self, *args):
+        return self._body
+
+
+def _iam_permissions_context(monkeypatch, granted):
+    _patch_tools(monkeypatch, "gcloud")
+    monkeypatch.setattr(
+        gcp.urllib.request,
+        "urlopen",
+        lambda request, timeout=None: FakeJsonResponse({"permissions": granted}),
+    )
+    return StubContext(run_json="fake-access-token", values={"project_id": "demo"})
+
+
+def test_iam_permissions_absent_passes_when_none_granted(monkeypatch):
+    ctx = _iam_permissions_context(monkeypatch, [])
+
+    outcome = gcp.gcp_iam_permissions(
+        ctx,
+        {"permissions": ["resourcemanager.projects.setIamPolicy"], "expect": "absent"},
+    )
+
+    assert outcome.status == "pass"
+    assert "fake-access-token" not in outcome.message + outcome.detail
+
+
+def test_iam_permissions_absent_fails_when_granted(monkeypatch):
+    ctx = _iam_permissions_context(monkeypatch, ["resourcemanager.projects.setIamPolicy"])
+
+    outcome = gcp.gcp_iam_permissions(
+        ctx,
+        {"permissions": ["resourcemanager.projects.setIamPolicy"], "expect": "absent"},
+    )
+
+    assert outcome.status == "fail"
+    assert "setIamPolicy" in outcome.detail
+    assert "fake-access-token" not in outcome.detail
+
+
+def test_iam_permissions_present_passes_when_all_granted(monkeypatch):
+    ctx = _iam_permissions_context(monkeypatch, ["storage.objects.get", "storage.objects.list"])
+
+    outcome = gcp.gcp_iam_permissions(
+        ctx,
+        {
+            "permissions": ["storage.objects.get", "storage.objects.list"],
+            "expect": "present",
+        },
+    )
+
+    assert outcome.status == "pass"
+
+
+def test_iam_permissions_present_fails_when_missing(monkeypatch):
+    ctx = _iam_permissions_context(monkeypatch, ["storage.objects.get"])
+
+    outcome = gcp.gcp_iam_permissions(
+        ctx,
+        {
+            "permissions": ["storage.objects.get", "storage.objects.list"],
+            "expect": "present",
+        },
+    )
+
+    assert outcome.status == "fail"
+    assert "storage.objects.list" in outcome.detail
+
+
+def test_iam_binding_absent_without_role_checks_any_binding(monkeypatch):
+    _patch_tools(monkeypatch, "gcloud")
+    ctx = StubContext(
+        gcloud_json={"bindings": [{"role": "roles/storage.objectViewer", "members": ["allUsers"]}]},
+        values={"project_id": "demo"},
+    )
+
+    outcome = gcp.gcp_iam_binding(
+        ctx,
+        {"scope": "bucket", "bucket": "demo-bucket", "member": "allUsers", "present": False},
+    )
+
+    assert outcome.status == "fail"
+    assert "allUsers" in outcome.message
+    assert "roles/storage.objectViewer" in outcome.detail
+
+
+def test_iam_binding_absent_without_role_passes_when_no_bindings(monkeypatch):
+    _patch_tools(monkeypatch, "gcloud")
+    ctx = StubContext(gcloud_json={"bindings": []}, values={"project_id": "demo"})
+
+    outcome = gcp.gcp_iam_binding(
+        ctx,
+        {"scope": "bucket", "bucket": "demo-bucket", "member": "allUsers", "present": False},
+    )
+
+    assert outcome.status == "pass"

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import json
 import shutil
+import urllib.error
+import urllib.request
 
 from ..gcp_names import last_segment, parse_network_attachment, parse_subnet
 from ..models import Outcome
@@ -279,10 +281,12 @@ def gcp_iam_binding(ctx, params):
     members = params.get("members")
     if members is None and params.get("member"):
         members = [params["member"]]
-    if not role or not members:
-        return Outcome.fail("check needs 'role' and 'member' or 'members'")
+    if not members:
+        return Outcome.fail("check needs 'member' or 'members'")
     members = [str(member) for member in members]
     should_be_present = bool(params.get("present", True))
+    if should_be_present and not role:
+        return Outcome.fail("check needs 'role' when present is true")
 
     project = _project(ctx, params)
     run_project = project
@@ -377,30 +381,54 @@ def gcp_iam_binding(ctx, params):
             str(member) for member in binding.get("members", [])
         }
 
-    actual_for_role = granted.get(str(role), set())
-    actual_folded = _casefold_members(actual_for_role)
-    missing_members = [member for member in members if member.casefold() not in actual_folded]
+    if role:
+        actual_for_role = granted.get(str(role), set())
+        actual_folded = _casefold_members(actual_for_role)
+        missing_members = [member for member in members if member.casefold() not in actual_folded]
 
-    if should_be_present and missing_members:
-        roles_summary = (
-            ", ".join(sorted(role_name for role_name in granted if granted[role_name])) or "none"
+        if should_be_present and missing_members:
+            roles_summary = (
+                ", ".join(sorted(role_name for role_name in granted if granted[role_name]))
+                or "none"
+            )
+            return Outcome.fail(
+                f"{role} is not granted to {', '.join(missing_members)} on {target}",
+                detail=(
+                    f"Roles present on {target}: {roles_summary}\n"
+                    f"Members with {role}: {', '.join(sorted(actual_for_role)) or 'none'}"
+                ),
+                hint="Apply the Terraform or grant the role manually, then re-run.",
+            )
+
+        if not should_be_present and not missing_members:
+            return Outcome.fail(
+                f"{role} is granted to {', '.join(members)} on {target}, but should not be"
+            )
+
+        action = "granted to" if should_be_present else "not granted to"
+        return Outcome.ok(f"{role} {action} {', '.join(members)} on {target}")
+
+    # No role: with present: false, assert the member appears in no binding at
+    # all. Useful for allUsers / allAuthenticatedUsers checks.
+    members_folded = _casefold_members(members)
+    roles_with_member: dict[str, list[str]] = {}
+    for role_name, role_members in granted.items():
+        matching = [member for member in role_members if member.casefold() in members_folded]
+        if matching:
+            roles_with_member[role_name] = sorted(matching)
+
+    if roles_with_member:
+        detail = "\n".join(
+            f"  {role_name}: {', '.join(role_members)}"
+            for role_name, role_members in sorted(roles_with_member.items())
         )
         return Outcome.fail(
-            f"{role} is not granted to {', '.join(missing_members)} on {target}",
-            detail=(
-                f"Roles present on {target}: {roles_summary}\n"
-                f"Members with {role}: {', '.join(sorted(actual_for_role)) or 'none'}"
-            ),
-            hint="Apply the Terraform or grant the role manually, then re-run.",
+            f"{', '.join(members)} has bindings on {target}",
+            detail="Bindings found:\n" + detail,
+            hint="Remove the public or unauthorised principal from the IAM policy.",
         )
 
-    if not should_be_present and not missing_members:
-        return Outcome.fail(
-            f"{role} is granted to {', '.join(members)} on {target}, but should not be"
-        )
-
-    action = "granted to" if should_be_present else "not granted to"
-    return Outcome.ok(f"{role} {action} {', '.join(members)} on {target}")
+    return Outcome.ok(f"{', '.join(members)} has no bindings on {target}")
 
 
 @check("gcp_service_account", "Assert a service account exists")
@@ -814,3 +842,117 @@ def gcp_network_attachment(ctx, params):
     if subnets:
         summary += f", subnet(s): {', '.join(subnets)}"
     return Outcome.ok(summary)
+
+
+def _post_json(url: str, payload: dict, token: str, timeout: float) -> object:
+    """POST JSON with an OAuth token and parse the JSON response.
+
+    Deliberately keeps the token out of every error message.
+    """
+
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload).encode("utf-8"),
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            body = response.read().decode("utf-8", "replace")
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", "replace") if exc.fp else ""
+        raise RuntimeError(f"HTTP {exc.code}: {detail[:1000]}") from exc
+    except (urllib.error.URLError, TimeoutError, OSError) as exc:
+        reason = getattr(exc, "reason", exc)
+        raise RuntimeError(f"request failed: {reason}") from exc
+
+    try:
+        return json.loads(body)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"could not parse response: {exc}") from exc
+
+
+@check("gcp_iam_permissions", "Assert effective permissions for the calling identity")
+def gcp_iam_permissions(ctx, params):
+    # Resource Manager's projects.testIamPermissions evaluates permissions that
+    # apply to the project resource. Resource-scoped permissions belong in a
+    # resource-specific check such as gcp_iam_binding role absence.
+    missing = _missing_gcloud()
+    if missing:
+        return missing
+
+    project = _project(ctx, params)
+    if not project:
+        return Outcome.skip("needs config value 'project_id'")
+
+    raw_permissions = params.get("permissions")
+    if isinstance(raw_permissions, str):
+        raw_permissions = [item.strip() for item in raw_permissions.split(",")]
+    if not isinstance(raw_permissions, (list, tuple, set)) or not raw_permissions:
+        return Outcome.fail("check needs a non-empty 'permissions' list")
+    permissions = [str(item).strip() for item in raw_permissions if str(item).strip()]
+    if not permissions:
+        return Outcome.fail("check needs a non-empty 'permissions' list")
+
+    expectation = str(params.get("expect", "absent")).strip().lower()
+    if expectation in {"absent", "deny", "denied", "not_granted", "not-granted"}:
+        expect_present = False
+    elif expectation in {"present", "granted", "allow", "allowed"}:
+        expect_present = True
+    else:
+        return Outcome.fail("expect must be 'absent' or 'present'")
+
+    token_result = ctx.run(["gcloud", "auth", "print-access-token"], timeout=15)
+    if not token_result.ok:
+        return Outcome.fail(
+            "could not get an access token from gcloud",
+            detail=(token_result.stderr or token_result.error or "").strip()[:2000],
+            hint="Authenticate with gcloud auth login / application-default login.",
+        )
+    token = token_result.stdout.strip()
+    if not token:
+        return Outcome.fail(
+            "gcloud returned an empty access token",
+            hint="Authenticate with gcloud auth login / application-default login.",
+        )
+
+    timeout = float(params.get("http_timeout") or 20)
+    url = f"https://cloudresourcemanager.googleapis.com/v1/projects/{project}:testIamPermissions"
+    try:
+        payload = _post_json(url, {"permissions": permissions}, token, timeout)
+    except RuntimeError as exc:
+        return Outcome.fail(
+            f"testIamPermissions failed for project {project}",
+            detail=str(exc),
+            hint="Check cloudresourcemanager.googleapis.com and that the caller can test IAM.",
+        )
+
+    granted_raw = payload.get("permissions", []) if isinstance(payload, dict) else None
+    if not isinstance(granted_raw, list):
+        return Outcome.fail("unexpected testIamPermissions response", detail=str(payload)[:2000])
+    granted = [str(item) for item in granted_raw]
+
+    if expect_present:
+        not_granted = [item for item in permissions if item not in granted]
+        if not_granted:
+            return Outcome.fail(
+                f"{len(not_granted)} of {len(permissions)} required permission(s) are missing",
+                detail="Missing:\n" + "\n".join(f"  - {item}" for item in sorted(not_granted)),
+            )
+        return Outcome.ok(f"all {len(permissions)} required permission(s) are granted")
+
+    if granted:
+        return Outcome.fail(
+            f"{len(granted)} permission(s) that should be absent are granted",
+            detail="Granted:\n" + "\n".join(f"  - {item}" for item in sorted(granted)),
+            hint="Remove the broad role from the workbench identity and re-run.",
+        )
+
+    return Outcome.ok(
+        f"none of {len(permissions)} forbidden permission(s) are granted",
+        detail=f"tested on project {project}",
+    )
